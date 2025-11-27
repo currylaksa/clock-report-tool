@@ -10,7 +10,7 @@ st.markdown("""
 **Instructions:**
 1. Upload the daily **Clock Detail Report** (Excel file).
 2. The system will process **ECNB** and **ECMW**.
-3. It generates a **Pivot-style** view (grouped and sorted) just like the manual report.
+3. It generates a **Pivot-style** view with thick separator lines between companies.
 4. **Original sheets are preserved.**
 """)
 
@@ -19,39 +19,26 @@ def create_pivot_view(df_input, group_cols):
     Simulates a Pivot Table "Tabular View" by sorting and hiding repeated labels.
     """
     # 1. Sort the data strictly by the grouping order
-    # Use fillna to handle empty cells gracefully before sorting
     df_sorted = df_input.fillna("").sort_values(by=group_cols).copy()
     
     # 2. Create a display version where we hide duplicates (Masking)
-    # We convert to string to ensure we can write empty strings
     df_display = df_sorted.astype(str).copy()
     
-    # We iterate through the columns to mask duplicates, but ONLY if the parent column is also a duplicate.
-    # Logic: If Company is same as above, hide Company. 
-    #        If Company AND Name are same as above, hide Name.
-    #        If Company AND Name AND Account are same as above, hide Account.
-    
-    # Initialize a tracker for the previous row
     prev_row = {col: None for col in group_cols}
-    
-    # We need to modify df_display index by index. 
-    # It's faster to do this via a list of lists for display purposes.
     formatted_rows = []
     
     for _, row in df_sorted.iterrows():
         current_row = []
-        is_parent_same = True # Assumption starts true, breaks if a parent differs
+        is_parent_same = True 
         
         for col in group_cols:
             val = row[col]
-            # Check if this value matches the previous row AND the parent hierarchy was also the same
             if is_parent_same and val == prev_row[col]:
-                current_row.append("") # Hide it (Pivot look)
+                current_row.append("") 
             else:
-                current_row.append(val) # Show it
-                is_parent_same = False # Break the chain for child columns
+                current_row.append(val) 
+                is_parent_same = False 
             
-            # Update previous row tracker
             prev_row[col] = val
             
         formatted_rows.append(current_row)
@@ -63,7 +50,7 @@ uploaded_file = st.file_uploader("Upload your clockreport file (xlsx)", type="xl
 
 if uploaded_file:
     try:
-        # Load ALL sheets to preserve them
+        # Load ALL sheets
         all_sheets = pd.read_excel(uploaded_file, sheet_name=None)
         
         source_sheet_name = "Clock Detail Report"
@@ -76,29 +63,37 @@ if uploaded_file:
         # Cleanup Headers
         df_source.columns = df_source.columns.astype(str).str.strip()
         
-        # Prepare Output
         output = BytesIO()
         
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             workbook = writer.book
             
-            # --- FORMATS ---
-            # Header: Bold, Light Blue, Border
+            # --- DEFINE FORMATS ---
+            # We need combinations of formats because xlsxwriter doesn't merge them automatically.
+            
+            # Base Properties
+            base_props = {'border': 1, 'align': 'left', 'valign': 'vcenter'}
+            thick_top_props = {'top': 2, 'bottom': 1, 'left': 1, 'right': 1, 'align': 'left', 'valign': 'vcenter'}
+            
+            # 1. Standard Data
+            fmt_std = workbook.add_format(base_props)
+            fmt_std_thick = workbook.add_format(thick_top_props)
+            
+            # 2. Bold (For Company Name)
+            fmt_bold = workbook.add_format({**base_props, 'bold': True})
+            fmt_bold_thick = workbook.add_format({**thick_top_props, 'bold': True})
+            
+            # 3. Orange (For Duplicate DU IDs)
+            fmt_orange = workbook.add_format({**base_props, 'bg_color': '#FFC000', 'font_color': '#000000'})
+            fmt_orange_thick = workbook.add_format({**thick_top_props, 'bg_color': '#FFC000', 'font_color': '#000000'})
+            
+            # Header Format
             header_fmt = workbook.add_format({
                 'bold': True, 'text_wrap': False, 'valign': 'vcenter', 'align': 'center',
                 'fg_color': '#D9E1F2', 'border': 1
             })
-            
-            # Data: Border, align left
-            data_fmt = workbook.add_format({'border': 1, 'align': 'left'})
 
-            # Bold Data: Border, align left, Bold (for Main Categories)
-            data_bold_fmt = workbook.add_format({'border': 1, 'align': 'left', 'bold': True})
-            
-            # Orange Highlight (Duplicate DU IDs)
-            orange_fmt = workbook.add_format({'bg_color': '#FFC000', 'font_color': '#000000', 'border': 1})
-            
-            # 1. Write Original Sheets
+            # Write Original Sheets
             for sheet_name, df in all_sheets.items():
                 df.to_excel(writer, sheet_name=sheet_name, index=False)
             
@@ -110,23 +105,22 @@ if uploaded_file:
                     st.error("Error: File has fewer than 9 columns.")
                     st.stop()
 
-                # Filter Data (Column I / Index 8)
+                # Filter Data
                 mask = df_source.iloc[:, 8].astype(str).str.contains(category, case=False, na=False)
                 df_filtered = df_source[mask]
                 
-                # Write Data Sheet (Raw Data)
+                # Write Raw Data Sheet
                 df_filtered.to_excel(writer, sheet_name=f"Data {category}", index=False)
                 
-                # --- PIVOT SIMULATION ---
+                # --- PIVOT VIEW ---
                 pivot_cols = ["Company", "Name", "Account", "DU ID"]
                 
-                # Check keys
                 missing = [c for c in pivot_cols if c not in df_filtered.columns]
                 if missing:
                     st.error(f"Missing columns: {missing}")
                     st.stop()
                 
-                # Get the Raw Sorted Data (for logic) and Display Data (for visuals)
+                # Create Pivot Data
                 df_raw_pivot = df_filtered[pivot_cols].drop_duplicates()
                 df_sorted, df_display = create_pivot_view(df_raw_pivot, pivot_cols)
                 
@@ -134,67 +128,76 @@ if uploaded_file:
                 worksheet = workbook.add_worksheet(pivot_sheet_name)
                 writer.sheets[pivot_sheet_name] = worksheet
                 
-                # Write Headers (Row 3, Index 2)
+                # Write Headers
                 for col_num, val in enumerate(pivot_cols):
                     worksheet.write(2, col_num, val, header_fmt)
                 
-                # Write Display Data (Row 4, Index 3)
-                # We iterate row by row to write and apply format
+                # Write Data with Formats
                 for row_idx, row_data in df_display.iterrows():
-                    # We need to check DU ID for duplication logic.
-                    # DU ID is the last column (Index 3 in pivot_cols).
-                    # We check the RAW sorted dataframe for the actual value to detect duplicates.
-                    actual_du_id = df_sorted.iloc[row_idx]["DU ID"]
                     
-                    # Check if this DU ID appears more than once in the whole filtered list
-                    # (Note: Logic from script: highlight if DU ID is duplicate in the PIVOT list)
-                    is_duplicate = len(df_sorted[df_sorted["DU ID"] == actual_du_id]) > 1
+                    # Logic: New Subcon (Company)?
+                    # If Company column (index 0) is NOT empty, it's a new group (or the first one).
+                    # We apply thick top border if it's a new group AND not the very first data row.
+                    is_new_subcon = (row_data[0] != "") and (row_idx > 0)
+                    
+                    # Logic: Duplicate DU ID?
+                    actual_du_id = df_sorted.iloc[row_idx]["DU ID"]
+                    is_duplicate_du = len(df_sorted[df_sorted["DU ID"] == actual_du_id]) > 1
                     
                     excel_row = row_idx + 3
                     
                     for col_idx, cell_value in enumerate(row_data):
-                        # Determine Format
-                        cell_fmt = data_fmt
+                        # Determine Format Object based on 3 states:
+                        # 1. Is it a Bold Company Name? (Col 0 and not empty)
+                        # 2. Is it a Duplicate DU ID? (Col 3 and is_duplicate)
+                        # 3. Does it need a Thick Top Border? (is_new_subcon)
                         
-                        # 1. Check for Duplicate DU ID (Column 3)
-                        if col_idx == 3 and is_duplicate:
-                            cell_fmt = orange_fmt
-                        # 2. Bold the Company Name (Column 0) if visible (easier to view)
-                        elif col_idx == 0 and cell_value != "":
-                            cell_fmt = data_bold_fmt
+                        cell_fmt = fmt_std # Default
+                        
+                        if is_new_subcon:
+                            if col_idx == 0 and cell_value != "":
+                                cell_fmt = fmt_bold_thick
+                            elif col_idx == 3 and is_duplicate_du:
+                                cell_fmt = fmt_orange_thick
+                            else:
+                                cell_fmt = fmt_std_thick
+                        else:
+                            if col_idx == 0 and cell_value != "":
+                                cell_fmt = fmt_bold
+                            elif col_idx == 3 and is_duplicate_du:
+                                cell_fmt = fmt_orange
+                            else:
+                                cell_fmt = fmt_std
 
                         worksheet.write(excel_row, col_idx, cell_value, cell_fmt)
 
-                # Set Column Widths (Visuals)
-                worksheet.set_column(0, 0, 40) # Company (Wide)
-                worksheet.set_column(1, 1, 30) # Name (Medium)
-                worksheet.set_column(2, 2, 20) # Account
-                worksheet.set_column(3, 3, 25) # DU ID
+                # Set Widths
+                worksheet.set_column(0, 0, 40)
+                worksheet.set_column(1, 1, 30)
+                worksheet.set_column(2, 2, 20)
+                worksheet.set_column(3, 3, 25)
                 
-                # --- Summary Table (at G3) ---
+                # --- Summary Table ---
                 summary = df_filtered.groupby("Company")["Name"].nunique().reset_index()
                 summary.columns = ["Company", "Count of Name"]
                 
-                # Write Summary Headers
                 worksheet.write("G3", "Company", header_fmt)
                 worksheet.write("H3", "Count of Name", header_fmt)
                 
-                # Write Summary Data
                 last_row = 3
                 for idx, row in summary.iterrows():
                     last_row = idx + 3
-                    worksheet.write(last_row, 6, row["Company"], data_fmt)
-                    worksheet.write(last_row, 7, row["Count of Name"], data_fmt)
+                    worksheet.write(last_row, 6, row["Company"], fmt_std)
+                    worksheet.write(last_row, 7, row["Count of Name"], fmt_std)
                 
-                # Write Grand Total Row
+                # Grand Total
                 total_row = last_row + 1
                 total_count = summary["Count of Name"].sum()
                 worksheet.write(total_row, 6, "Grand Total", header_fmt)
                 worksheet.write(total_row, 7, total_count, header_fmt)
                 
-                # Summary Widths
-                worksheet.set_column(6, 6, 40) # G
-                worksheet.set_column(7, 7, 15) # H
+                worksheet.set_column(6, 6, 40)
+                worksheet.set_column(7, 7, 15)
 
         output.seek(0)
         st.success("Processing Complete!")
