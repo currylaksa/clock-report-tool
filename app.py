@@ -2,17 +2,11 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-# Page Configuration
+# Page Configuration - Keep layout centered for a clean look
 st.set_page_config(page_title="Eastern Region Clock Report", layout="centered")
 
-st.title("Eastern Region Clock Report Processor")
-st.markdown("""
-**Instructions:**
-1. Upload the daily **Clock Detail Report** (Excel file).
-2. The system will process **ECNB** and **ECMW**.
-3. It generates a **Pivot-style** view with thick separator lines between companies.
-4. **Original sheets are preserved.**
-""")
+# Simple Title
+st.header("Eastern Region Clock Report Processor")
 
 def create_pivot_view(df_input, group_cols):
     """
@@ -45,8 +39,8 @@ def create_pivot_view(df_input, group_cols):
         
     return df_sorted, pd.DataFrame(formatted_rows, columns=group_cols)
 
-# 1. File Upload
-uploaded_file = st.file_uploader("Upload your clockreport file (xlsx)", type="xlsx")
+# 1. File Upload (Clean, no extra text)
+uploaded_file = st.file_uploader("Upload 'Clock Detail Report' (xlsx)", type="xlsx")
 
 if uploaded_file:
     try:
@@ -69,9 +63,6 @@ if uploaded_file:
             workbook = writer.book
             
             # --- DEFINE FORMATS ---
-            # We need combinations of formats because xlsxwriter doesn't merge them automatically.
-            # Update: Added 'text_wrap': True and changed 'valign' to 'top' for better readability
-            
             # Base Properties
             base_props = {'border': 1, 'align': 'left', 'valign': 'top', 'text_wrap': True}
             thick_top_props = {'top': 2, 'bottom': 1, 'left': 1, 'right': 1, 'align': 'left', 'valign': 'top', 'text_wrap': True}
@@ -144,8 +135,6 @@ if uploaded_file:
                 for row_idx, row_data in df_display.iterrows():
                     
                     # Logic: New Subcon (Company)?
-                    # If Company column (index 0) is NOT empty, it's a new group (or the first one).
-                    # We apply thick top border if it's a new group AND not the very first data row.
                     is_new_subcon = (row_data[0] != "") and (row_idx > 0)
                     
                     # Logic: Duplicate DU ID?
@@ -155,11 +144,7 @@ if uploaded_file:
                     excel_row = row_idx + 3
                     
                     for col_idx, cell_value in enumerate(row_data):
-                        # Determine Format Object based on 3 states:
-                        # 1. Is it a Bold Company Name? (Col 0 and not empty)
-                        # 2. Is it a Duplicate DU ID? (Col 3 and is_duplicate)
-                        # 3. Does it need a Thick Top Border? (is_new_subcon)
-                        
+                        # Determine Format
                         cell_fmt = fmt_std # Default
                         
                         if is_new_subcon:
@@ -210,11 +195,13 @@ if uploaded_file:
         output.seek(0)
         st.success("Processing Complete!")
         
+        # 2. Download Button
         st.download_button(
-            label="Download Processed Excel File",
+            label="Download Result",
             data=output,
             file_name="Processed_ClockReport.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True # Makes the button span the width for better mobile view
         )
         
     except Exception as e:
