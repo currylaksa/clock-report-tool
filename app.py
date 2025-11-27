@@ -70,10 +70,11 @@ if uploaded_file:
             
             # --- DEFINE FORMATS ---
             # We need combinations of formats because xlsxwriter doesn't merge them automatically.
+            # Update: Added 'text_wrap': True and changed 'valign' to 'top' for better readability
             
             # Base Properties
-            base_props = {'border': 1, 'align': 'left', 'valign': 'vcenter'}
-            thick_top_props = {'top': 2, 'bottom': 1, 'left': 1, 'right': 1, 'align': 'left', 'valign': 'vcenter'}
+            base_props = {'border': 1, 'align': 'left', 'valign': 'top', 'text_wrap': True}
+            thick_top_props = {'top': 2, 'bottom': 1, 'left': 1, 'right': 1, 'align': 'left', 'valign': 'top', 'text_wrap': True}
             
             # 1. Standard Data
             fmt_std = workbook.add_format(base_props)
@@ -127,6 +128,13 @@ if uploaded_file:
                 pivot_sheet_name = f"Pivot {category}"
                 worksheet = workbook.add_worksheet(pivot_sheet_name)
                 writer.sheets[pivot_sheet_name] = worksheet
+                
+                # FEATURE: Freeze Panes (Row 3, Col 0) - Keeps headers visible when scrolling
+                worksheet.freeze_panes(3, 0)
+                
+                # FEATURE: AutoFilter on headers
+                # Range: Row 2, Col 0 to Last Row, Last Col
+                worksheet.autofilter(2, 0, 2 + len(df_display), len(pivot_cols) - 1)
                 
                 # Write Headers
                 for col_num, val in enumerate(pivot_cols):
