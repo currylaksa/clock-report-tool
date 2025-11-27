@@ -19,7 +19,8 @@ def create_pivot_view(df_input, group_cols):
     Simulates a Pivot Table "Tabular View" by sorting and hiding repeated labels.
     """
     # 1. Sort the data strictly by the grouping order
-    df_sorted = df_input.sort_values(by=group_cols).copy()
+    # Use fillna to handle empty cells gracefully before sorting
+    df_sorted = df_input.fillna("").sort_values(by=group_cols).copy()
     
     # 2. Create a display version where we hide duplicates (Masking)
     # We convert to string to ensure we can write empty strings
@@ -90,6 +91,9 @@ if uploaded_file:
             
             # Data: Border, align left
             data_fmt = workbook.add_format({'border': 1, 'align': 'left'})
+
+            # Bold Data: Border, align left, Bold (for Main Categories)
+            data_bold_fmt = workbook.add_format({'border': 1, 'align': 'left', 'bold': True})
             
             # Orange Highlight (Duplicate DU IDs)
             orange_fmt = workbook.add_format({'bg_color': '#FFC000', 'font_color': '#000000', 'border': 1})
@@ -149,11 +153,17 @@ if uploaded_file:
                     excel_row = row_idx + 3
                     
                     for col_idx, cell_value in enumerate(row_data):
-                        # Apply Orange if it's the DU ID column (col_idx 3) and it is a duplicate
+                        # Determine Format
+                        cell_fmt = data_fmt
+                        
+                        # 1. Check for Duplicate DU ID (Column 3)
                         if col_idx == 3 and is_duplicate:
-                            worksheet.write(excel_row, col_idx, cell_value, orange_fmt)
-                        else:
-                            worksheet.write(excel_row, col_idx, cell_value, data_fmt)
+                            cell_fmt = orange_fmt
+                        # 2. Bold the Company Name (Column 0) if visible (easier to view)
+                        elif col_idx == 0 and cell_value != "":
+                            cell_fmt = data_bold_fmt
+
+                        worksheet.write(excel_row, col_idx, cell_value, cell_fmt)
 
                 # Set Column Widths (Visuals)
                 worksheet.set_column(0, 0, 40) # Company (Wide)
@@ -170,9 +180,17 @@ if uploaded_file:
                 worksheet.write("H3", "Count of Name", header_fmt)
                 
                 # Write Summary Data
+                last_row = 3
                 for idx, row in summary.iterrows():
-                    worksheet.write(idx + 3, 6, row["Company"], data_fmt)
-                    worksheet.write(idx + 3, 7, row["Count of Name"], data_fmt)
+                    last_row = idx + 3
+                    worksheet.write(last_row, 6, row["Company"], data_fmt)
+                    worksheet.write(last_row, 7, row["Count of Name"], data_fmt)
+                
+                # Write Grand Total Row
+                total_row = last_row + 1
+                total_count = summary["Count of Name"].sum()
+                worksheet.write(total_row, 6, "Grand Total", header_fmt)
+                worksheet.write(total_row, 7, total_count, header_fmt)
                 
                 # Summary Widths
                 worksheet.set_column(6, 6, 40) # G
