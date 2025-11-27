@@ -5,6 +5,17 @@ from io import BytesIO
 # Page Configuration - Keep layout centered for a clean look
 st.set_page_config(page_title="Eastern Region Clock Report", layout="centered")
 
+# --- HIDE STREAMLIT BRANDING & MENU ---
+# This CSS hides the top right menu (where "View Source" is) and the footer
+hide_menu_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+    """
+st.markdown(hide_menu_style, unsafe_allow_html=True)
+
 # Simple Title
 st.header("Eastern Region Clock Report Processor")
 
