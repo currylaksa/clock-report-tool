@@ -108,9 +108,23 @@ if uploaded_file:
                     st.error("Error: File has fewer than 9 columns.")
                     st.stop()
 
-                # Filter Data
-                mask = df_source.iloc[:, 8].astype(str).str.contains(category, case=False, na=False)
-                df_filtered = df_source[mask]
+                # --- NEW FILTERING LOGIC ---
+                
+                # 1. Filter by Category (Column I / Index 8)
+                # Note: We create a boolean mask (True/False list)
+                mask_category = df_source.iloc[:, 8].astype(str).str.contains(category, case=False, na=False)
+                
+                # 2. Filter by Distance (Column F / Index 5)
+                # Convert column to numeric, forcing errors (text) to NaN
+                dist_numeric = pd.to_numeric(df_source.iloc[:, 5], errors='coerce')
+                
+                # Keep rows where Distance is <= 500 (this automatically excludes NaNs/Blanks)
+                mask_distance = dist_numeric <= 500
+                
+                # Combine both filters (AND logic)
+                df_filtered = df_source[mask_category & mask_distance]
+                
+                # ---------------------------
                 
                 # Write Raw Data Sheet
                 df_filtered.to_excel(writer, sheet_name=f"Data {category}", index=False)
